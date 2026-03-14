@@ -1,6 +1,7 @@
 from chromadb.utils import embedding_functions
 from chromadb import Client
 from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer  # optional if you need it directly
 
 load_dotenv()
 
@@ -17,7 +18,7 @@ try:
 except:
     pass
 
-collection = client.create_collection(
+collection = client.get_or_create_collection(
     name="files",
     embedding_function=local_ef
 )
