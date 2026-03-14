@@ -1,5 +1,5 @@
 from tools.files import scan_folder_recursive
-from vector.chroma import query_chunks
+from .moorcheh import query_chunks
 def keyword_search(query, files):
 
     matches = []
@@ -29,11 +29,14 @@ def vector_search(query, n=5):
 
     results = query_chunks(query, n)
 
-    metadatas = results["metadatas"][0]
+    # Chroma version (commented out)
+    # metadatas = results["metadatas"][0]
+    # files = []
+    # for meta in metadatas:
+    #     files.append(meta["file_path"])
+    # return list(set(files))
 
-    files = []
-
-    for meta in metadatas:
-        files.append(meta["file_path"])
+    # Moorcheh version
+    files = [item["metadata"]["file_path"] for item in results["results"]]
 
     return list(set(files))
