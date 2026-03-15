@@ -12,12 +12,6 @@ local_ef = embedding_functions.SentenceTransformerEmbeddingFunction(
     model_name="all-MiniLM-L6-v2"  # lightweight, fast
 )
 
-# Delete old collection if exists
-try:
-    client.delete_collection("files")
-except:
-    pass
-
 collection = client.get_or_create_collection(
     name="files",
     embedding_function=local_ef

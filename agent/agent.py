@@ -3,7 +3,22 @@ import shutil
 from pathlib import Path
 import datetime
 from tools.llm import genResponse
-from tools.tools import organize_folder, summarize_file, start_folder_monitor
+from tools.tools import (
+    organize_folder, 
+    summarize_file, 
+    start_folder_monitor,
+    move_file,
+    list_files_by_date
+)
+from tools.advanced_tools import (
+    time_travel_search,
+    explain_folder,
+    edit_file_nl,
+    work_history_summary,
+    proactive_suggestions,
+    explain_computer,
+    generate_file_graph
+)
 from vector.search import hybrid_search
 
 UNDO_STACK = []
@@ -30,20 +45,40 @@ TOOL_REGISTRY = {
     "semantic_search": hybrid_search,
     "undo_last": undo_last,
     "start_folder_monitor": start_folder_monitor,
+    "move_file": move_file,
+    "list_files_by_date": list_files_by_date,
+    "time_travel_search": time_travel_search,
+    "explain_folder": explain_folder,
+    "edit_file_nl": edit_file_nl,
+    "work_history_summary": work_history_summary,
+    "proactive_suggestions": proactive_suggestions,
+    "explain_computer": explain_computer,
+    "generate_file_graph": generate_file_graph,
 }
 
 def run_agent(user_input: str) -> str:
     print("AI Agent Ready.")
 
     context = f"""
-    You are a system AI agent.
+    You are a system AI agent with advanced file management and intelligence capabilities.
 
     Available tools:
-    - organize_folder(folder_path)
-    - summarize_file(file_path)
-    - semantic_search(query)
-    - undo_last()
-    - start_folder_monitor(folder_path)
+    - organize_folder(folder_path) - Organizes files into categorized subfolders
+    - summarize_file(file_path) - Summarizes PDF, DOCX, TXT, and code files
+    - semantic_search(query) - Searches files semantically
+    - undo_last() - Undoes the last action
+    - start_folder_monitor(folder_path) - Monitors folder for new files
+    - move_file(source_path, destination_path) - Moves files or folders
+    - list_files_by_date(folder_path, sort_by='created', reverse=False) - Lists files sorted by date
+    
+    ADVANCED TOOLS:
+    - time_travel_search(query, limit=5) - Search file history: "What PDF did I read before my ML midterm?"
+    - explain_folder(folder_path) - Analyzes folder and provides intelligent insights and organization suggestions
+    - edit_file_nl(file_path, instruction) - Edit files with natural language: "Shorten my resume to one page"
+    - work_history_summary(days=7) - Summarizes what you worked on recently
+    - proactive_suggestions(scan_path=None) - Suggests helpful actions based on system state
+    - explain_computer(scan_paths=None) - High-level overview of your entire computer
+    - generate_file_graph(folder_path, max_files=50) - Creates semantic graph of file relationships
 
     You can chain actions by referencing previous results with "RESULT_0", "RESULT_1", etc. in args.
 
@@ -76,10 +111,13 @@ def run_agent(user_input: str) -> str:
         args = action["args"].copy()
         for key, value in args.items():
             if isinstance(value, str) and value.startswith("RESULT_"):
-                idx = int(value[6:])
+                idx = int(value[7:])
                 prev_result = results[idx]
-                if isinstance(prev_result, list):
-                    args[key] = prev_result[0] if prev_result else ""
+                if isinstance(prev_result, list) and prev_result:
+                    if key == 'folder_path':
+                        args[key] = os.path.dirname(prev_result[0])
+                    else:
+                        args[key] = prev_result[0]
                 else:
                     args[key] = str(prev_result)
         result = execute_tool(action["tool"], args)
@@ -143,16 +181,6 @@ def log_action(action: str, status: str) -> None:
         log_file.write(log_entry)
 
 
-
-
-
-#DO LATER
-
-# def watch_folder(folder_path: str) -> None:
-#     """
-#     Continuously monitors a folder and reacts when
-#     new files are added or modified.
-#     """
 
 
 

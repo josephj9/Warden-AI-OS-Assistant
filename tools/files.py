@@ -5,6 +5,7 @@ import glob
 def resolve_folder(folder_name):
     """
     Converts common folder names into real system paths.
+    If not a common name and not absolute, assumes it's a subfolder of Desktop.
     """
     home = os.path.expanduser("~")
 
@@ -15,12 +16,15 @@ def resolve_folder(folder_name):
         "pictures": os.path.join(home, "Pictures")
     }
 
-    folder_name = folder_name.lower()
+    folder_name_lower = folder_name.lower()
 
-    if folder_name in folders:
-        return folders[folder_name]
+    if folder_name_lower in folders:
+        return folders[folder_name_lower]
     else:
-        return os.path.abspath(os.path.expanduser(folder_name))
+        if os.path.isabs(folder_name):
+            return folder_name
+        else:
+            return os.path.join(home, "Desktop", folder_name)
 
 
 def list_files(folder):
@@ -47,8 +51,11 @@ def scan_folder_recursive(folder):
     folder = resolve_folder(folder)
 
     all_files = []
+    skip_dirs = {'venv', '__pycache__', '.git', 'node_modules', '.vscode', 'build', 'dist', '.pytest_cache'}
 
     for root, dirs, files in os.walk(folder):
+        # Modify dirs in place to skip unwanted directories
+        dirs[:] = [d for d in dirs if d not in skip_dirs]
         for file in files:
             full_path = os.path.join(root, file)
             all_files.append(full_path)

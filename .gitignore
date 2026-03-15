@@ -31,3 +31,5 @@ Thumbs.db
 chroma/
 *.pt
 *.bin
+
+file_memory.json
