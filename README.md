@@ -9,6 +9,7 @@ Warden is a terminal-based AI assistant that understands your actual filesystem.
 You type:
 
 warden "organize the folder with the machine learning power points"
+
 Warden:
 
 Uses Moorcheh semantic search to figure out which folder you mean
@@ -34,19 +35,23 @@ Moorcheh gives Warden:
 Semantic recall over your file history (not just filenames)
 Robust cross-session memory (it works even after restarts)
 A clean separation: Moorcheh = memory layer, Warden = agent + tools
-Demo: one command
+
 # Organize semantically, no hard paths
 warden --yes "organize the folder with the machine learning power points"
+
 # Summarize a file by description
 warden "summarize the ML lecture notes"
+
 # Time-travel memory
 warden "what did I just summarize?"
 warden "what did I work on today?"
+
 Behind the scenes:
 
 Desktop / Documents / Downloads are indexed once into Chroma
 Moorcheh stores behavioral memories (what you touched, when, why)
 Natural language is turned into concrete tool calls by the agent
+
 Core Capabilities
 Plain English → File actions
 
@@ -91,6 +96,7 @@ Indexes new PDFs into Moorcheh/Chroma
 Moves them to your preferred folder
 Works with semantic paths:
 “monitor downloads and move PDFs to my lab4 721 folder”
+
 How Warden Uses Moorcheh
 Architecture (simplified):
 
@@ -127,6 +133,7 @@ vector/search.hybrid_search(...) combines:
 semantic search via Chroma
 keyword search over paths This powers resolve_path_semantic(...) which turns:
 “folder with ML slides” → a concrete folder path.
+
 Tech Stack
 Layer	Technology
 Agent + CLI	Python 3.12
@@ -137,6 +144,7 @@ File watching	watchdog
 PDF / DOCX parsing	pdfplumber, pdfminer.six, python-docx
 LLM calls	tools.llm (OpenAI/Google-compatible wrapper)
 CLI install	setuptools console_scripts (warden)
+
 Installation
 Prerequisites
 
@@ -147,41 +155,53 @@ From c:\Users\Balantech\Desktop\Agent:
 
 # Install dependencies + global `warden` CLI
 python -m pip install -e .
+
 This:
 
 Installs everything from requirements.txt
 Registers the warden command pointing at warden_cli:main
+
+
 Usage
 Global CLI (recommended)
 From any directory:
 
 # Semantic organize
 warden --yes "organize my lab4721 folder"
+
 # Summarize by description
 warden "summarize the ML lecture notes"
+
 # Time-travel queries
 warden "what did I just summarize?"
 warden "what did I work on today?"
+
 # Dry run (hackathon demo safe)
 warden --dry-run "monitor downloads and move PDFs to my lab4 721 folder"
 warden --dry-run "explain my computer"
+
 Flags:
 
 --yes / -y — auto-confirm, skip the plan prompt.
 --dry-run — print plan + actions, no filesystem changes (powered by run_agent(..., dry_run=True)).
+
+
 Local interactive mode
-cd c:\Users\Balantech\Desktop\Agent
+cd c:\YOUR\FILE\PATH
 python main.py
+
 On first run:
 
 Warden indexes Desktop, Documents, Downloads into Chroma.
 It writes index_state.json so this heavy step never repeats.
+
 Prompt:
 
 Ask the agent:
 > organize the folder with the machine learning power points
 > summarize the ML lecture notes
 > what did I just summarize?
+
 Testing & Sample Folders
 See TESTING.md for a step-by-step manual test plan.
 
@@ -193,13 +213,7 @@ Desktop/WardenTest/ML Slides/lecture1_powerpoint.pdf
 Desktop/WardenTest/ML Slides/lecture2_powerpoint.pdf
 Desktop/WardenTest/Resumes/resume_v1.docx
 Desktop/WardenTest/Random/notes.txt
-Run:
 
-warden --yes "organize the folder with the machine learning power points"
-warden "summarize the ML lecture notes"
-warden "what did I just summarize?"
-warden "what have I been doing for the last 1 days?"
-warden "show me the file timeline for today"
 You’ll exercise:
 
 Semantic path resolution
@@ -234,3 +248,25 @@ Recall
 
 time_travel_search and file_timeline call file_memory.search_by_context(...)
 This uses Moorcheh.query_chunks(...) (or Chroma fallback) to find relevant past events.
+
+Agent/
+├── agent/
+│   └── agent.py            # LLM agent, tool registry, planner, dry-run
+├── tools/
+│   ├── tools.py            # Core tools: organize, summarize, move, monitor, prefs
+│   ├── advanced_tools.py   # Time-travel search, explain_folder, file_timeline, etc.
+│   ├── utils.py            # resolve_path + resolve_path_semantic (Moorcheh/Chroma)
+│   └── llm.py              # LLM wrapper
+├── vector/
+│   ├── moorcheh.py         # Moorcheh client: add_chunk, query_chunks
+│   ├── chroma.py           # Local Chroma store and embedding
+│   ├── indexer.py          # One-time filesystem indexing into Chroma
+│   └── search.py           # hybrid_search (semantic + keyword)
+├── memory.py               # FileMemory: logs file access + Moorcheh integration
+├── conversation_memory.py  # Persistent conversational history
+├── main.py                 # Interactive REPL + initial indexing (once)
+├── warden_cli.py           # Global CLI entrypoint (`warden`)
+├── setup.py                # setuptools config, console_scripts, requirements wiring
+├── requirements.txt
+├── TESTING.md              # Manual test plan
+└── file_memory.json / conversation_history.json / index_state.json
