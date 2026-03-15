@@ -1,3 +1,14 @@
+import os
+import warnings
+import logging
+
+# Suppress HuggingFace and sentence-transformers noise
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+os.environ.setdefault("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1")
+warnings.filterwarnings("ignore", category=UserWarning)
+
 from chromadb.utils import embedding_functions
 from chromadb import Client
 from dotenv import load_dotenv
@@ -7,7 +18,7 @@ load_dotenv()
 
 client = Client()
 
-# Use local embeddings (no API call)
+# Use local embeddings (no API call) — loads silently
 local_ef = embedding_functions.SentenceTransformerEmbeddingFunction(
     model_name="all-MiniLM-L6-v2"  # lightweight, fast
 )

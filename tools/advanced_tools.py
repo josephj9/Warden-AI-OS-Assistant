@@ -11,6 +11,116 @@ from typing import Dict, List
 from tools.llm import summerize
 from tools.extract import extract_pdf, extract_docx, extract_text
 from memory import file_memory
+from tools.utils import resolve_path
+
+
+# TOOL: File Timeline
+def file_timeline(days: int = 1, date: str = None):
+    """
+    Shows a beautiful chronological timeline of file activity.
+    Groups events by date and hour.
+
+    Examples:
+      "What did I work on today?"     -> file_timeline(days=1)
+      "Show me yesterday's activity"  -> file_timeline(days=2)
+      "What did I do on March 14?"    -> file_timeline(date='2025-03-14')
+    """
+    try:
+        all_accesses = file_memory.get_accesses_in_range("", "~") or []
+        if not all_accesses:
+            all_accesses = file_memory.get_recent_accesses(limit=200)
+
+        if not all_accesses:
+            return {
+                "status": "success",
+                "message": (
+                    "\n⏳  **No file activity recorded yet.**\n\n"
+                    "Try summarizing a file or using organize_folder first — "
+                    "Warden tracks everything you do!\n"
+                ),
+                "timeline": []
+            }
+
+        # --- Filter by date or day range ---
+        now = datetime.now()
+        if date:
+            try:
+                target = datetime.strptime(date, "%Y-%m-%d")
+                start = target.replace(hour=0, minute=0, second=0)
+                end   = target.replace(hour=23, minute=59, second=59)
+            except ValueError:
+                return {"status": "error", "message": f"Invalid date format: '{date}'. Use YYYY-MM-DD."}
+        else:
+            start = now - timedelta(days=days)
+            end   = now
+
+        filtered = []
+        for a in all_accesses:
+            try:
+                ts = datetime.fromisoformat(a.get("timestamp", ""))
+                if start <= ts <= end:
+                    filtered.append((ts, a))
+            except Exception:
+                pass
+
+        if not filtered:
+            period = date if date else f"the last {days} day(s)"
+            return {
+                "status": "success",
+                "message": f"\n📭  No activity recorded for {period}.\n",
+                "timeline": []
+            }
+
+        # --- Group by date then by hour ---
+        by_day: Dict[str, Dict[str, list]] = defaultdict(lambda: defaultdict(list))
+        for ts, a in sorted(filtered):
+            day_key  = ts.strftime("%A, %B %d %Y")          # "Saturday, March 14 2025"
+            hour_key = ts.strftime("%I:%M %p")               # "03:21 PM"
+            by_day[day_key][hour_key].append({
+                "time":    hour_key,
+                "action":  a.get("user_task", "File accessed"),
+                "file":    a.get("file_name", ""),
+                "path":    a.get("file_path", ""),
+            })
+
+        # --- Build output ---
+        ACTION_EMOJI = {
+            "summarize": "📄",
+            "organize":  "📂",
+            "move":      "🚀",
+            "search":    "🔍",
+            "edit":      "✏️",
+            "monitor":   "👁️",
+        }
+
+        lines = ["\n🗓️  **File Activity Timeline**\n"]
+        timeline_data = []
+
+        for day, hours in by_day.items():
+            lines.append(f"## 📅 {day}")
+            lines.append("")
+            day_entries = []
+            for hour, events in sorted(hours.items()):
+                for ev in events:
+                    action = ev["action"].lower()
+                    emoji = next((e for k, e in ACTION_EMOJI.items() if k in action), "📌")
+                    file_label = f" — **{ev['file']}**" if ev["file"] else ""
+                    lines.append(f"  **{ev['time']}**  {emoji}  {ev['action']}{file_label}")
+                    day_entries.append(ev)
+            lines.append("")
+            timeline_data.append({"day": day, "events": day_entries})
+
+        total = sum(len(h) for d in by_day.values() for h in d.values())
+        lines.append(f"_Total: {total} event(s) recorded_\n")
+
+        return {
+            "status":   "success",
+            "timeline": timeline_data,
+            "output":   "\n".join(lines)
+        }
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 # TOOL 6: Time-Travel File Search
@@ -65,6 +175,7 @@ def explain_folder(folder_path: str):
     - Organization suggestions
     """
     try:
+        folder_path = resolve_path(folder_path)
         if not os.path.isdir(folder_path):
             return {"status": "error", "message": f"Folder not found: {folder_path}"}
         
@@ -145,6 +256,7 @@ def edit_file_nl(file_path: str, instruction: str):
     - "Remove all comments from this code"
     """
     try:
+        file_path = resolve_path(file_path)
         if not os.path.exists(file_path):
             return {"status": "error", "message": f"File not found: {file_path}"}
         
@@ -277,7 +389,7 @@ def proactive_suggestions(scan_path: str = None):
                 os.path.expanduser("~/Documents")
             ]
         else:
-            common_paths = [scan_path]
+            common_paths = [resolve_path(scan_path)]
         
         for path in common_paths:
             if not os.path.exists(path):
@@ -344,7 +456,9 @@ def explain_computer(scan_paths: List[str] = None, depth: int = 2):
                 os.path.join(home, "Downloads"),
                 os.path.join(home, "Projects") if os.path.exists(os.path.join(home, "Projects")) else None
             ]
-            scan_paths = [p for p in scan_paths if p and os.path.exists(p)]
+        
+        scan_paths = [resolve_path(p) for p in scan_paths if p]
+        scan_paths = [p for p in scan_paths if os.path.exists(p)]
         
         # Collect all files
         all_files = []
@@ -421,6 +535,7 @@ def generate_file_graph(folder_path: str, max_files: int = 50):
     Returns a hierarchical structure.
     """
     try:
+        folder_path = resolve_path(folder_path)
         if not os.path.isdir(folder_path):
             return {"status": "error", "message": f"Folder not found: {folder_path}"}
         

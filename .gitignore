@@ -33,3 +33,4 @@ chroma/
 *.bin
 
 file_memory.json
+conversation_history.json

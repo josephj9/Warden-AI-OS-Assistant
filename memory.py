@@ -21,13 +21,25 @@ class FileMemory:
         """Load memory from JSON file"""
         if os.path.exists(self.memory_file):
             with open(self.memory_file, 'r') as f:
-                return json.load(f)
-        return {"accesses": []}
+                data = json.load(f)
+                if "preferences" not in data:
+                    data["preferences"] = {}
+                return data
+        return {"accesses": [], "preferences": {}}
     
     def _save_memory(self):
         """Save memory to JSON file"""
         with open(self.memory_file, 'w') as f:
             json.dump(self.memory, f, indent=2)
+
+    def set_preference(self, key: str, value: str):
+        """Save a user preference."""
+        self.memory.setdefault("preferences", {})[key] = value
+        self._save_memory()
+        
+    def get_preference(self, key: str) -> Optional[str]:
+        """Retrieve a user preference."""
+        return self.memory.get("preferences", {}).get(key)
     
     def record_access(self, file_path: str, user_task: str = "", context: str = "", summary: str = ""):
         """
