@@ -88,7 +88,7 @@ TOOL_REGISTRY = {
     "file_timeline": file_timeline,
 }
 
-def run_agent(user_input: str) -> str:
+def run_agent(user_input: str, dry_run: bool = False) -> str:
     console.print("[bold cyan]AI Agent Ready.[/bold cyan]")
 
     # Save the user's turn to conversation history
@@ -104,20 +104,23 @@ def run_agent(user_input: str) -> str:
     context = f"""
     You are a system AI agent with advanced file management and intelligence capabilities.
 
+    PATH ARGUMENTS: For folder_path and file_path you can pass either exact paths/names OR natural language descriptions.
+    The system will resolve them semantically. Examples: "folder with the machine learning power points", "the ML lecture notes", "my resume".
+
     Available tools:
-    - organize_folder(folder_path) - Organizes files into categorized subfolders
-    - summarize_file(file_path) - Summarizes PDF, DOCX, TXT, and code files
+    - organize_folder(folder_path) - Organizes files into categorized subfolders. folder_path can be a description like "folder with ML slides".
+    - summarize_file(file_path) - Summarizes PDF, DOCX, TXT, and code files. file_path can be a description.
     - semantic_search(query) - Searches files semantically
     - undo_last() - Undoes the last action
-    - start_folder_monitor(folder_path, move_to=None) - Monitors folder for new files and moves them to move_to
+    - start_folder_monitor(folder_path, move_to=None) - Monitors folder for new files. Paths can be descriptions.
     - set_user_preference(category, preference) - Memorize user preference (e.g. category='pdf_destination', preference='Desktop')
     - move_file(source_path, destination_path) - Moves files or folders
-    - list_files_by_date(folder_path, sort_by='created', reverse=False) - Lists files sorted by date
+    - list_files_by_date(folder_path, sort_by='created', reverse=False) - Lists files. folder_path can be a description.
     
     ADVANCED TOOLS:
     - time_travel_search(query, limit=5) - Search file history: "What PDF did I read before my ML midterm?"
-    - explain_folder(folder_path) - Analyzes folder and provides intelligent insights and organization suggestions. Say "explain folder X" to trigger.
-    - edit_file_nl(file_path, instruction) - Edit files with natural language: "Shorten my resume to one page"
+    - explain_folder(folder_path) - Analyzes folder. folder_path can be a path or description (e.g. "my ML slides folder").
+    - edit_file_nl(file_path, instruction) - Edit files with natural language. file_path can be a path or description.
     - work_history_summary(days=7) - Summarizes what you worked on recently. Say "what did I work on" to trigger.
     - proactive_suggestions(scan_path=None) - Suggests helpful actions based on system state
     - explain_computer(scan_paths=None) - High-level overview of your entire computer. Say "explain my computer" to trigger.
@@ -157,6 +160,19 @@ def run_agent(user_input: str) -> str:
 
     plan = response.get("plan", "")
     actions = response.get("actions", [])
+
+    # Dry-run: only show plan + actions, no side effects.
+    if dry_run or os.environ.get("WARDEN_DRY_RUN") == "1":
+        lines = ["DRY RUN – no actions were executed.", ""]
+        if plan:
+            lines.append("Plan:")
+            lines.append(plan)
+            lines.append("")
+        if actions:
+            lines.append("Actions:")
+            for i, action in enumerate(actions, 1):
+                lines.append(f"{i}. {action.get('tool')} {action.get('args')}")
+        return "\n".join(lines)
 
     if not request_permission(response):
         return "Execution cancelled by user."
@@ -431,7 +447,12 @@ def request_permission(action_plan: dict) -> bool:
     """
     Displays planned actions and asks user for confirmation
     before executing system-level changes.
+    Skips confirmation when WARDEN_AUTO_YES=1 (e.g. terminal one-shot with --yes).
     """
+    import os
+    if os.environ.get("WARDEN_AUTO_YES") == "1":
+        return True
+
     plan = action_plan.get("plan", "")
     actions = action_plan.get("actions", [])
 

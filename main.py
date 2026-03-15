@@ -23,12 +23,47 @@ from tools.advanced_tools import proactive_suggestions
 
 console = Console()
 
-# Auto-index key folders on startup
-console.print(Panel("Indexing key folders...", title="Startup", border_style="blue"))
-index_folder(os.path.expanduser("~/Desktop"))
-index_folder(os.path.expanduser("~/Documents"))
-index_folder(os.path.expanduser("~/Downloads"))
-console.print(Panel("Indexing complete. Warden AI is ready!", title="Startup", border_style="green"))
+# --- Terminal one-shot: run from CLI e.g. python main.py "organize the folder with ML powerpoints" ---
+def run_terminal_one_shot():
+    """If user passed a query as args, run once and exit. Use --yes to skip confirmation."""
+    if __name__ != "__main__":
+        return False
+    args = sys.argv[1:]
+    if not args:
+        return False
+    auto_yes = "--yes" in args or "-y" in args
+    args = [a for a in args if a not in ("--yes", "-y")]
+    if not args:
+        return False
+    query = " ".join(args)
+    os.environ["WARDEN_AUTO_YES"] = "1" if auto_yes else "0"
+    result = run_agent(query)
+    console.print(Rule("[bold green]Result[/bold green]", style="green"))
+    console.print(Markdown(str(result)))
+    console.print(Rule(style="green"))
+    return True
+
+if run_terminal_one_shot():
+    sys.exit(0)
+
+# Auto-index key folders on first startup only
+INDEX_STATE_FILE = "index_state.json"
+indexed_ok = False
+try:
+    if os.path.exists(INDEX_STATE_FILE):
+        indexed_ok = True
+    else:
+        console.print(Panel("Indexing key folders...", title="Startup", border_style="blue"))
+        index_folder(os.path.expanduser("~/Desktop"))
+        index_folder(os.path.expanduser("~/Documents"))
+        index_folder(os.path.expanduser("~/Downloads"))
+        with open(INDEX_STATE_FILE, "w", encoding="utf-8") as f:
+            f.write('{"indexed": true}')
+        indexed_ok = True
+        console.print(Panel("Indexing complete. Warden AI is ready!", title="Startup", border_style="green"))
+except Exception:
+    # If indexing fails, continue; semantic tools will still work on whatever is already indexed.
+    indexed_ok = False
 
 # --- Idle Proactive Suggestion System ---
 IDLE_TIMEOUT = 60  # seconds of inactivity before suggesting (fires once per session)

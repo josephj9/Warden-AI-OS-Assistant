@@ -23,7 +23,7 @@ from tools.advanced_tools import (
     generate_file_graph
 )
 from fpdf import FPDF
-from tools.utils import resolve_path
+from tools.utils import resolve_path, resolve_path_semantic
 try:
     from vector.moorcheh import add_chunk
 except ImportError:
@@ -35,12 +35,18 @@ def organize_folder(folder_path: str):
     """
     Scans a folder and uses AI to intelligently sort files
     into semantically meaningful subfolders based on content and name.
+    folder_path can be a path, a folder name, or a semantic description
+    (e.g. "the folder with the machine learning power points").
     Returns a human-readable summary of what was organized.
     """
-    path = Path(resolve_path(folder_path))
-
+    resolved = resolve_path(folder_path)
+    path = Path(resolved)
     if not path.exists():
-        return {"status": "error", "message": f"I couldn't find the folder '{folder_path}'. Please check the name and try again."}
+        semantic = resolve_path_semantic(folder_path, prefer_folder=True)
+        if semantic:
+            path = Path(semantic)
+        else:
+            return {"status": "error", "message": f"I couldn't find the folder '{folder_path}'. Please check the name or try describing it (e.g. 'folder with ML slides')."}
 
     if path == Path("/"):
         return {"status": "error", "message": "For safety, I won't organize the root directory."}
@@ -126,9 +132,15 @@ def organize_folder(folder_path: str):
 def summarize_file(file_path: str):
     """
     Summarizes the content of a file based on its extension.
+    file_path can be a path, filename, or semantic description (e.g. "the ML lecture notes").
     Supports PDF, TXT, and various code/text-based formats.
     """
-    file_path = resolve_path(file_path)
+    resolved = resolve_path(file_path)
+    if not os.path.exists(resolved):
+        semantic = resolve_path_semantic(file_path, prefer_folder=False)
+        if semantic:
+            resolved = semantic
+    file_path = resolved
     if not os.path.exists(file_path):
         return {"status": "error", "message": f"File not found: {file_path}"}
 
@@ -181,12 +193,23 @@ def summarize_file(file_path: str):
 # TOOL 3: Move File
 def move_file(source_path: str, destination_path: str):
     """
-    Moves a file or folder from a source path to a destination path.
+    Moves a file or folder from source to destination.
+    Both paths can be exact paths or semantic descriptions (e.g. "my resume", "Desktop").
     """
     try:
-        source_path = resolve_path(source_path)
-        destination_path = resolve_path(destination_path)
-        
+        src = resolve_path(source_path)
+        if not os.path.exists(src):
+            semantic_src = resolve_path_semantic(source_path, prefer_folder=False)
+            if semantic_src:
+                src = semantic_src
+        source_path = src
+        dest = resolve_path(destination_path)
+        if not os.path.isdir(dest) and not os.path.isfile(dest):
+            semantic_dest = resolve_path_semantic(destination_path, prefer_folder=True)
+            if semantic_dest:
+                dest = semantic_dest
+        destination_path = dest
+
         if not os.path.exists(source_path):
             return {"status": "error", "message": f"Source path not found: {source_path}"}
         
@@ -205,12 +228,18 @@ def move_file(source_path: str, destination_path: str):
 def list_files_by_date(folder_path: str, sort_by: str = 'created', reverse: bool = False, file_extension: str = None):
     """
     Lists files in a directory sorted by date.
+    folder_path can be a path, folder name, or semantic description.
     sort_by: 'created' or 'modified'.
     reverse: True for descending order, False for ascending.
     file_extension: Optional filter for file extension (e.g., '.txt').
     """
     try:
-        folder_path = resolve_path(folder_path)
+        resolved = resolve_path(folder_path)
+        if not os.path.isdir(resolved):
+            semantic = resolve_path_semantic(folder_path, prefer_folder=True)
+            if semantic:
+                resolved = semantic
+        folder_path = resolved
         if not os.path.isdir(folder_path):
             return {"status": "error", "message": f"Folder not found: {folder_path}"}
 
@@ -249,11 +278,15 @@ def start_folder_monitor(folder_path: str, move_to: str = None, actions: list = 
     Monitors a folder for new files and automatically:
     - Indexes new PDFs into the vector search database
     - Moves new PDFs to move_to folder (or pdf_destination preference if set)
-    Both folder_path and move_to accept short names like 'Downloads' or 'lab4 721'.
+    folder_path and move_to can be paths, short names, or semantic descriptions.
     """
     from pathlib import Path as _Path
 
     resolved_folder = resolve_path(folder_path)
+    if not os.path.isdir(resolved_folder):
+        semantic = resolve_path_semantic(folder_path, prefer_folder=True)
+        if semantic:
+            resolved_folder = semantic
     if not os.path.isdir(resolved_folder):
         return {"status": "error", "message": f"Folder to monitor not found: {folder_path}"}
 
@@ -261,6 +294,10 @@ def start_folder_monitor(folder_path: str, move_to: str = None, actions: list = 
     destination = None
     if move_to:
         destination = resolve_path(move_to)
+        if not os.path.isdir(destination):
+            semantic_dest = resolve_path_semantic(move_to, prefer_folder=True)
+            if semantic_dest:
+                destination = semantic_dest
     else:
         pref = file_memory.get_preference("pdf_destination")
         if pref:
@@ -269,20 +306,87 @@ def start_folder_monitor(folder_path: str, move_to: str = None, actions: list = 
     if destination and not os.path.isdir(destination):
         return {"status": "error", "message": f"Destination folder not found: {destination}"}
 
+    def _wait_for_file_ready(path: str, timeout: float = 60.0, stable_time: float = 1.0, stable_checks: int = 2) -> bool:
+        """Wait until a file is fully written, stable in size, and can be opened for read."""
+        start = time.time()
+        last_size = -1
+        stable_count = 0
+
+        while time.time() - start < timeout:
+            if not os.path.exists(path):
+                time.sleep(0.5)
+                stable_count = 0
+                continue
+
+            # Skip temporary download file extensions while browser is still downloading
+            _, ext = os.path.splitext(path)
+            if ext.lower() in {".crdownload", ".part", ".tmp", ".temp"}:
+                time.sleep(0.5)
+                stable_count = 0
+                continue
+
+            try:
+                size = os.path.getsize(path)
+            except OSError:
+                time.sleep(0.5)
+                stable_count = 0
+                continue
+
+            # Check that we can open the file for reading (not locked)
+            try:
+                with open(path, "rb") as f:
+                    f.read(1)
+            except Exception:
+                time.sleep(0.5)
+                stable_count = 0
+                continue
+
+            if size == last_size and size > 0:
+                stable_count += 1
+                if stable_count >= stable_checks:
+                    return True
+            else:
+                stable_count = 0
+
+            last_size = size
+            time.sleep(stable_time)
+
+        return False
+
     def index_and_move(file_path: str):
         """Index a new PDF and move it to the destination if configured."""
         try:
+            # Some browsers download to a temp extension (e.g. .crdownload, .part) then rename.
+            # If we see a temp file, wait for the final PDF to appear.
+            temp_exts = {".crdownload", ".part", ".tmp"}
+            orig_path = file_path
+            _, ext = os.path.splitext(file_path)
+            if ext.lower() in temp_exts:
+                file_path = file_path[: -len(ext)]
+
+            # If the final file isn't a PDF, ignore it.
             if not file_path.lower().endswith(".pdf"):
                 return
 
-            # Wait briefly to ensure file has finished writing (e.g. from a browser download)
-            import time as _time
-            _time.sleep(1.5)
+            # Wait until the file is fully downloaded / stable before processing.
+            if not _wait_for_file_ready(file_path):
+                return
+
+            # Give the system a short buffer to finalize file handles (e.g., installer finish).
+            time.sleep(5)
 
             if not os.path.exists(file_path):
                 return
 
-            text = extract_pdf(file_path)
+            # Try to extract PDF text, retrying briefly if the file is still being finalized.
+            text = None
+            for attempt in range(3):
+                try:
+                    text = extract_pdf(file_path)
+                    break
+                except Exception:
+                    time.sleep(0.5)
+
             if text:
                 chunks = chunk_text(text)
                 for chunk in chunks:
@@ -296,8 +400,27 @@ def start_folder_monitor(folder_path: str, move_to: str = None, actions: list = 
                 while os.path.exists(dest_file):
                     dest_file = f"{base} ({counter}){ext}"
                     counter += 1
-                shutil.move(file_path, dest_file)
-        except Exception as e:
+
+                # Copy first (to avoid losing the source if move happens too early)
+                try:
+                    shutil.copy2(file_path, dest_file)
+
+                    # Verify the copied file looks valid
+                    if os.path.getsize(dest_file) == os.path.getsize(file_path):
+                        try:
+                            with open(dest_file, "rb") as f:
+                                f.read(1)
+                            os.remove(file_path)
+                        except Exception:
+                            # Keep the original if destination is still locked / invalid
+                            pass
+                    else:
+                        # If sizes diverge, keep the original and retry later
+                        pass
+                except Exception:
+                    # If copy fails, leave original in place and try later
+                    pass
+        except Exception:
             pass  # Silent fail per file — don't crash the monitor thread
 
     class IndexHandler(FileSystemEventHandler):

@@ -80,24 +80,46 @@ class FileMemory:
         """
         Search file history by semantic similarity.
         Example: "What PDF did I read before my ML midterm?"
+        Handles both Moorcheh (list of objects) and Chroma (dict with metadatas/distances) result formats.
         """
         try:
-            # Try vector search first
             results = query_chunks(query, n)
-            
-            # Format results
             formatted = []
-            for result in results:
-                if hasattr(result, 'metadata'):
-                    formatted.append({
-                        "file_path": result.metadata.get("file_path", ""),
-                        "file_name": result.metadata.get("file_name", ""),
-                        "timestamp": result.metadata.get("timestamp", ""),
-                        "user_task": result.metadata.get("user_task", ""),
-                        "relevance_score": getattr(result, 'score', 0)
-                    })
-            
-            return formatted
+
+            # Chroma returns dict: {"metadatas": [[{...}, ...]], "distances": [[...]]}
+            if isinstance(results, dict):
+                metadatas = results.get("metadatas", [[]])
+                meta_list = metadatas[0] if metadatas else []
+                distances = results.get("distances", [[]])
+                dist_list = distances[0] if distances else []
+                for i, meta in enumerate(meta_list):
+                    if isinstance(meta, dict):
+                        dist = dist_list[i] if i < len(dist_list) else 0
+                        # L2 distance: lower is better; convert to relevance-like score
+                        score = 1.0 / (1.0 + float(dist)) if dist is not None else 0
+                        formatted.append({
+                            "file_path": meta.get("file_path", ""),
+                            "file_name": meta.get("file_name", ""),
+                            "timestamp": meta.get("timestamp", ""),
+                            "user_task": meta.get("user_task", ""),
+                            "relevance_score": score,
+                        })
+            else:
+                # Moorcheh: list of objects with .metadata and optionally .score
+                for result in results:
+                    meta = getattr(result, "metadata", None) or (result if isinstance(result, dict) else None)
+                    if meta and isinstance(meta, dict):
+                        formatted.append({
+                            "file_path": meta.get("file_path", ""),
+                            "file_name": meta.get("file_name", ""),
+                            "timestamp": meta.get("timestamp", ""),
+                            "user_task": meta.get("user_task", ""),
+                            "relevance_score": getattr(result, "score", 0),
+                        })
+
+            if formatted:
+                return formatted
+            return self._local_search(query, n)
         except Exception as e:
             print(f"Vector search failed: {e}, falling back to local search")
             return self._local_search(query, n)

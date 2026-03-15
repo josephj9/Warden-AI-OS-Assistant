@@ -15,8 +15,9 @@ from datetime import datetime
 from typing import List, Dict
 
 CONVERSATION_FILE = "conversation_history.json"
-MAX_TURNS_IN_CONTEXT = 10   # How many past turns to inject into the prompt
+MAX_TURNS_IN_CONTEXT = 14   # How many past turns to inject into the prompt
 MAX_HISTORY_STORED = 200    # How many turns to keep on disk
+BRIEF_SUMMARY_MAX_CHARS = 120  # Max chars per turn in brief summary
 
 
 class ConversationMemory:
@@ -60,9 +61,27 @@ class ConversationMemory:
         """Return the last N turns."""
         return self.history[-n:]
 
-    def get_context_block(self, n: int = MAX_TURNS_IN_CONTEXT) -> str:
+    def get_brief_summary(self, n_turns: int = 6) -> str:
+        """
+        One-line summary of the last few turns for quick context.
+        E.g. "User: organize my folder. Agent: Organized 5 files. User: summarize readme."
+        """
+        turns = self.get_recent_turns(n_turns)
+        if not turns:
+            return ""
+        parts = []
+        for t in turns:
+            role = "User" if t["role"] == "user" else "Agent"
+            text = (t.get("text") or "").strip().replace("\n", " ")[:BRIEF_SUMMARY_MAX_CHARS]
+            if len((t.get("text") or "")) > BRIEF_SUMMARY_MAX_CHARS:
+                text += "..."
+            parts.append(f"{role}: {text}")
+        return " | ".join(parts)
+
+    def get_context_block(self, n: int = MAX_TURNS_IN_CONTEXT, include_brief: bool = True) -> str:
         """
         Format recent turns as a readable block to inject into the agent prompt.
+        If include_brief is True, prefixes a one-line summary for conversational continuity.
         Returns empty string if no history.
         """
         turns = self.get_recent_turns(n)
@@ -70,6 +89,11 @@ class ConversationMemory:
             return ""
 
         lines = ["--- Conversation History (most recent last) ---"]
+        if include_brief:
+            brief = self.get_brief_summary(n_turns=min(6, len(turns)))
+            if brief:
+                lines.append(f"Brief: {brief}")
+                lines.append("")
         for turn in turns:
             ts = turn.get("timestamp", "")[:16].replace("T", " ")
             role_label = "User" if turn["role"] == "user" else "Agent"

@@ -2,6 +2,33 @@ import os
 from pathlib import Path
 from typing import Optional
 
+
+def resolve_path_semantic(description: str, prefer_folder: bool = True) -> Optional[str]:
+    """
+    Resolve a folder or file by semantic description using vector search.
+    E.g. "machine learning power points" -> path to folder containing matching files.
+    If prefer_folder is True (default), returns the folder containing the best match;
+    otherwise returns the best matching file path.
+    """
+    try:
+        from vector.search import hybrid_search
+        paths = hybrid_search(description)
+        if not paths:
+            return None
+        first = paths[0]
+        if isinstance(first, dict):
+            first = first.get("file_path") or first.get("path") or str(first)
+        first = str(first).strip()
+        if not first or not os.path.exists(first):
+            return None
+        if os.path.isdir(first):
+            return first
+        # It's a file; return its directory if we want a folder
+        return os.path.dirname(first) if prefer_folder else first
+    except Exception:
+        return None
+
+
 def resolve_path(path_str: str) -> str:
     """
     Intelligently resolves a user-provided file or folder name by searching

@@ -11,7 +11,7 @@ from typing import Dict, List
 from tools.llm import summerize
 from tools.extract import extract_pdf, extract_docx, extract_text
 from memory import file_memory
-from tools.utils import resolve_path
+from tools.utils import resolve_path, resolve_path_semantic
 
 
 # TOOL: File Timeline
@@ -169,13 +169,16 @@ def time_travel_search(query: str, limit: int = 5):
 # TOOL 7: Explain Folder (Auto-Understanding)
 def explain_folder(folder_path: str):
     """
-    Analyzes a folder and provides intelligent insights:
-    - File count and categorization
-    - Topic clustering
-    - Organization suggestions
+    Analyzes a folder and provides intelligent insights.
+    folder_path can be a path, name, or semantic description (e.g. "my ML slides folder").
     """
     try:
-        folder_path = resolve_path(folder_path)
+        resolved = resolve_path(folder_path)
+        if not os.path.isdir(resolved):
+            semantic = resolve_path_semantic(folder_path, prefer_folder=True)
+            if semantic:
+                resolved = semantic
+        folder_path = resolved
         if not os.path.isdir(folder_path):
             return {"status": "error", "message": f"Folder not found: {folder_path}"}
         
@@ -250,13 +253,15 @@ def explain_folder(folder_path: str):
 def edit_file_nl(file_path: str, instruction: str):
     """
     Edit files using natural language instructions.
-    Examples:
-    - "Shorten my resume to one page"
-    - "Turn my project report into a presentation"
-    - "Remove all comments from this code"
+    file_path can be a path, filename, or semantic description.
     """
     try:
-        file_path = resolve_path(file_path)
+        resolved = resolve_path(file_path)
+        if not os.path.exists(resolved):
+            semantic = resolve_path_semantic(file_path, prefer_folder=False)
+            if semantic:
+                resolved = semantic
+        file_path = resolved
         if not os.path.exists(file_path):
             return {"status": "error", "message": f"File not found: {file_path}"}
         
@@ -528,14 +533,16 @@ def explain_computer(scan_paths: List[str] = None, depth: int = 2):
 # TOOL 12: Generate Semantic File Graph
 def generate_file_graph(folder_path: str, max_files: int = 50):
     """
-    Creates a graph showing relationships between files based on:
-    - Topic similarity
-    - File type
-    - Access patterns
-    Returns a hierarchical structure.
+    Creates a graph showing relationships between files.
+    folder_path can be a path, name, or semantic description.
     """
     try:
-        folder_path = resolve_path(folder_path)
+        resolved = resolve_path(folder_path)
+        if not os.path.isdir(resolved):
+            semantic = resolve_path_semantic(folder_path, prefer_folder=True)
+            if semantic:
+                resolved = semantic
+        folder_path = resolved
         if not os.path.isdir(folder_path):
             return {"status": "error", "message": f"Folder not found: {folder_path}"}
         

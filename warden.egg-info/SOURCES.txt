@@ -1,0 +1,7 @@
+setup.py
+warden.egg-info/PKG-INFO
+warden.egg-info/SOURCES.txt
+warden.egg-info/dependency_links.txt
+warden.egg-info/entry_points.txt
+warden.egg-info/requires.txt
+warden.egg-info/top_level.txt
